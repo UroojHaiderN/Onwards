@@ -1,0 +1,7 @@
+# The site is index.html + app/. Everything else is source for the Mac
+# build or local tooling — it lives in the repo, not on the CDN.
+mac/
+serve.py
+.claude/
+README.md
+Onwards.dmg

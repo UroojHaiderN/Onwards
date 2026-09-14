@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Onwards — a notepad that shows you what's yours</title>
+<meta name="description" content="A quiet writing surface. Anything you paste is marked, so you always know how much of a piece is actually your own thinking." />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#1a1a1c" media="(prefers-color-scheme: dark)" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Onwards" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='8' fill='%231d1d1f'/%3E%3C/svg%3E" />
+<style>
+  /* Lato by Łukasz Dziedzic, SIL Open Font License — see fonts/OFL.txt.
+     Bundled locally rather than pulled from a CDN: this is a local-first
+     writing tool and it shouldn't phone anywhere to render your words. */
+  @font-face { font-family: 'Lato'; src: url('fonts/Lato-Regular.ttf') format('truetype');
+    font-weight: 400; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Lato'; src: url('fonts/Lato-Italic.ttf') format('truetype');
+    font-weight: 400; font-style: italic; font-display: swap; }
+  @font-face { font-family: 'Lato'; src: url('fonts/Lato-Bold.ttf') format('truetype');
+    font-weight: 700; font-style: normal; font-display: swap; }
+  @font-face { font-family: 'Lato'; src: url('fonts/Lato-BoldItalic.ttf') format('truetype');
+    font-weight: 700; font-style: italic; font-display: swap; }
+
+  /* ============================================================
+     Onwards — a writing surface with a conscience.
+     Colour discipline: lilac is reserved, always and only, for
+     "this isn't yours." It is never decoration.
+     ============================================================ */
+  :root {
+    --bg:        #ffffff;
+    --ink:       #1d1d1f;
+    --ink-2:     #6e6e73;   /* 4.9:1 on white — real text must pass AA */
+    --ink-3:     #c5c5ca;   /* placeholders only: decorative, never information */
+    --focus:     #0071e3;
+    --fill:      rgba(0,0,0,.055);
+    --rule:      rgba(0,0,0,.10);
+    --hair:      rgba(0,0,0,.07);
+
+    --mark:      #ffeec4;   /* borrowed: wash   */
+    --mark-hot:  #ffe3a2;   /* borrowed: hover  */
+    --mark-edge: #e8b955;   /* borrowed: edge   */
+    --mark-ink:  #8a5a12;   /* borrowed: text   */
+
+    --glass:  rgba(255,255,255,.78);
+    --shadow: 0 12px 38px rgba(0,0,0,.13), 0 1px 3px rgba(0,0,0,.05);
+    --ease:   cubic-bezier(.32,.72,0,1);
+    /* the document has a voice; the chrome stays native and invisible */
+    --prose:  'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #1a1a1c;
+      --ink:       #f5f5f7;
+      --ink-2:     #9a9aa0;
+      --ink-3:     #4d4d52;
+      --focus:     #4d9bff;
+      --fill:      rgba(255,255,255,.09);
+      --rule:      rgba(255,255,255,.14);
+      --hair:      rgba(255,255,255,.10);
+
+      --mark:      #4a3a18;
+      --mark-hot:  #5d4a1f;
+      --mark-edge: #97742c;
+      --mark-ink:  #ffd07a;
+
+      --glass:  rgba(42,42,45,.80);
+      --shadow: 0 12px 38px rgba(0,0,0,.55), 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+                 "Segoe UI", Helvetica, Arial, sans-serif;
+    font-feature-settings: "kern" 1, "liga" 1;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection { background: rgba(125,125,135,.24); }
+
+  /* keyboard users must be able to see where they are */
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+  .title:focus-visible, .editor:focus-visible { outline: none; }  /* the caret is the cue */
+
+  /* motion is decoration; never a barrier */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important; scroll-behavior: auto !important;
+    }
+  }
+
+  /* a writing tool has to print */
+  @media print {
+    .chrome, .rail, .float, .claim, .toast, .veil, .menu,
+    .primer, .receipt-link { display: none !important; }
+    html, body { background: #fff; color: #000; }
+    .sheet { max-width: none; padding: 0; }
+    .title { font-size: 26pt; margin-bottom: 16pt; font-family: var(--prose); }
+    .editor { font-size: 11.5pt; line-height: 1.5; min-height: 0; font-family: var(--prose); }
+    .colophon { position: static; margin-top: 24pt; padding: 0;
+                font-size: 8pt; color: #555; background: none; }
+    /* the marks are the point — they must survive the printer */
+    .pasted {
+      background: #ededed !important; box-shadow: none !important;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    a { color: #000; }
+  }
+
+  /* ---------- chrome that knows when to leave ---------- */
+  .chrome { transition: opacity .45s var(--ease); }
+  body.writing .chrome { opacity: 0; }
+
+  /* ---------- sheet ---------- */
+  .sheet {
+    position: relative;
+    max-width: 940px; margin: 0 auto;
+    padding: 30px 40px 0 54px;      /* left inset leaves room for the rule */
+    /* a column so the colophon can sink to the foot of a short page, and
+       so sticky has nothing below it to un-stick against on a long one */
+    min-height: 100svh; display: flex; flex-direction: column;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 9px;
+    height: 28px; margin-bottom: 78px;
+    user-select: none;
+  }
+  .mark { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); flex: none; }
+  .brandbtn {
+    display: inline-flex; align-items: center; gap: 9px;
+    font: inherit; font-size: 13px; font-weight: 500; letter-spacing: -0.006em;
+    color: var(--ink-2); background: none; border: none; cursor: pointer;
+    padding: 5px 8px 5px 5px; margin-left: -5px; border-radius: 9px;
+    transition: background .14s ease, color .14s ease;
+  }
+  .brandbtn:hover { background: var(--fill); color: var(--ink); }
+  .brandbtn .chev { width: 9px; height: 9px; opacity: .55; }
+
+  /* ---------- library + export menu ---------- */
+  .menu {
+    position: fixed; z-index: 90; min-width: 268px; max-width: 340px;
+    padding: 6px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    backdrop-filter: blur(26px) saturate(180%);
+    border: .5px solid var(--rule); border-radius: 14px;
+    box-shadow: var(--shadow);
+    opacity: 0; transform: translateY(-6px) scale(.98); pointer-events: none;
+    transition: opacity .15s ease, transform .2s var(--ease);
+  }
+  .menu.show { opacity: 1; transform: none; pointer-events: auto; }
+  .menu-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--ink-2);
+    padding: 8px 10px 6px;
+  }
+  .menu-list { max-height: 34vh; overflow-y: auto; }
+  .mi {
+    display: flex; align-items: center; gap: 9px; width: 100%;
+    font: inherit; font-size: 13.5px; color: var(--ink);
+    background: none; border: none; cursor: pointer; text-align: left;
+    padding: 8px 10px; border-radius: 9px;
+    transition: background .12s ease;
+  }
+  .mi:hover { background: var(--fill); }
+  .mi .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mi .when { font-size: 11.5px; color: var(--ink-2); flex: none; font-variant-numeric: tabular-nums; }
+  .mi .tick { width: 14px; flex: none; color: var(--ink); font-size: 12px; }
+  /* a lilac pip means that piece contains borrowed text — provenance at a glance */
+  .mi .pip { width: 6px; height: 6px; border-radius: 50%; background: var(--mark-edge); flex: none; }
+  .mi.danger { color: #c0392b; }
+  .mi.danger:hover { background: rgba(192,57,43,.09); }
+  @media (prefers-color-scheme: dark) { .mi.danger { color: #ff6b5a; } }
+  .menu-sep { height: .5px; background: var(--rule); margin: 5px 8px; }
+
+  /* ---------- the margin rule: grain, not grade ---------- */
+  .rail {
+    position: absolute; left: 26px; width: 2px;
+    border-radius: 2px; background: var(--hair);
+    pointer-events: auto;
+    transition: opacity .4s var(--ease);
+  }
+  .seg {
+    position: absolute; left: 0; width: 2px;
+    border-radius: 2px; background: var(--mark-edge);
+    transform-origin: 50% 50%;
+    transition: top .25s var(--ease), height .25s var(--ease), opacity .3s ease;
+  }
+  .seg.in { animation: segIn .55s var(--ease); }
+  @keyframes segIn {
+    0%   { transform: scaleY(.1); opacity: 0; }
+    100% { transform: scaleY(1);  opacity: 1; }
+  }
+  /* the rule adapts rather than disappears — it is the idea */
+  @media (max-width: 760px) {
+    .sheet { padding-left: 32px; padding-right: 22px; }
+    .rail  { left: 13px; }
+    .title { font-size: 34px; }
+    .editor { font-size: 17px; }
+  }
+  @media (max-width: 430px) {
+    .sheet { padding-left: 24px; padding-right: 16px; }
+    .rail  { left: 9px; }
+    .title { font-size: 29px; }
+  }
+
+  /* ---------- title ---------- */
+  .title {
+    display: block; width: 100%;
+    border: none; outline: none; background: transparent;
+    font-family: var(--prose); font-size: 42px; font-weight: 700;
+    letter-spacing: -0.018em; line-height: 1.12;   /* Lato needs less negative tracking than SF */
+    color: var(--ink); padding: 0; margin: 0 0 24px;
+    text-wrap: balance; caret-color: var(--ink);
+    outline: none;
+  }
+  .title:empty:before {
+    content: attr(data-placeholder); color: var(--ink-3); pointer-events: none;
+  }
+
+  /* ---------- editor ---------- */
+  .editor {
+    border: none; outline: none;
+    font-family: var(--prose);
+    font-size: 18px; line-height: 1.72; letter-spacing: 0;
+    min-height: 42vh; color: var(--ink); caret-color: var(--ink);
+    text-wrap: pretty;
+  }
+  .editor:empty { min-height: 0; }          /* let the primer sit under the prompt */
+  .editor:empty:before {
+    content: attr(data-placeholder); color: var(--ink-3); pointer-events: none;
+  }
+  .editor p { margin: 0 0 .9em; }
+  .editor h1 { font-size: 27px; font-weight: 700; letter-spacing: -0.012em; line-height: 1.25; margin: 1.5em 0 .4em; }
+  .editor h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.008em; line-height: 1.32; margin: 1.4em 0 .35em; }
+  .editor h1:first-child, .editor h2:first-child { margin-top: 0; }
+  .editor ul, .editor ol { margin: 0 0 .9em; padding-left: 1.25em; }
+  .editor li { margin: .2em 0; padding-left: .1em; }
+  .editor blockquote {
+    margin: 0 0 .9em; padding: 2px 0 2px 18px;
+    border-left: 2px solid var(--rule); color: var(--ink-2);
+  }
+  /* links are ink — lilac is spoken for */
+  .editor a {
+    color: var(--ink); text-decoration: underline;
+    text-decoration-color: var(--ink-3); text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+
+  /* ---------- the one thing we mark ---------- */
+  .pasted {
+    background: var(--mark);
+    border-radius: 4px; padding: .06em .2em; margin: 0 -.05em;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+    transition: background-color .4s var(--ease);
+  }
+  .pasted.hot { background: var(--mark-hot); }
+  .pasted.bloom { animation: bloom .6s var(--ease); }
+  @keyframes bloom {
+    0%   { background-color: rgba(245,186,64,.55); }
+    100% { background-color: var(--mark); }
+  }
+  .pasted.claiming { animation: letgo .5s var(--ease) forwards; }
+  @keyframes letgo {
+    0%   { background-color: var(--mark); }
+    35%  { background-color: rgba(245,186,64,.42); }
+    100% { background-color: transparent; }
+  }
+
+  /* ---------- primer: the whole product in one sentence ---------- */
+  .primer {
+    /* the tail margin is the room to keep writing without the colophon
+       sitting on your caret — on .primer, not .editor, so the rail
+       (sized from editor.offsetHeight) still stops at the last line */
+    margin: 18px 0 20vh; font-size: 14px; color: var(--ink-3);
+    letter-spacing: -0.006em;
+    transition: opacity .5s var(--ease);
+  }
+  .primer.gone { opacity: 0; pointer-events: none; }
+
+  /* ---------- colophon ---------- */
+  /* a colophon, not a dashboard: it sits after the writing, never over it */
+  .colophon {
+    position: sticky; bottom: 0; z-index: 4;
+    margin-top: auto; padding: 26px 0 18px;
+    font-size: 11.5px; color: var(--ink-2); letter-spacing: -0.002em;
+    user-select: none; font-variant-numeric: tabular-nums;
+    /* fades the writing out behind it rather than sitting on a hard edge */
+    background: linear-gradient(to bottom, transparent, var(--bg) 45%);
+  }
+  .receipt-link {
+    font: inherit; color: var(--ink-2); background: none; border: none;
+    padding: 0; margin-left: 6px; cursor: pointer;
+    text-decoration: underline; text-decoration-color: transparent;
+    text-underline-offset: 3px;
+    transition: text-decoration-color .18s ease, color .18s ease;
+  }
+  .receipt-link:hover { color: var(--ink); text-decoration-color: var(--ink-3); }
+  .receipt-link[hidden] { display: none; }
+
+  /* ---------- the receipt ---------- */
+  .veil {
+    position: fixed; inset: 0; z-index: 100;
+    display: grid; place-items: center; gap: 0;
+    background: rgba(20,20,22,.34);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    opacity: 0; pointer-events: none;
+    transition: opacity .28s var(--ease);
+  }
+  .veil.show { opacity: 1; pointer-events: auto; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .card {
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.34), 0 2px 8px rgba(0,0,0,.14);
+    transform: translateY(14px) scale(.97);
+    transition: transform .4s var(--ease);
+    background: #fff;
+  }
+  .veil.show .card { transform: none; }
+  .card svg { display: block; max-height: 74vh; width: auto; height: auto; }
+  .acts { display: flex; gap: 8px; }
+  .acts button {
+    font-family: inherit; font-size: 13px; font-weight: 500;
+    padding: 8px 15px; border-radius: 999px; cursor: pointer;
+    border: .5px solid rgba(255,255,255,.22);
+    background: rgba(255,255,255,.16); color: #fff;
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    transition: background .15s ease;
+  }
+  .acts button:hover { background: rgba(255,255,255,.28); }
+
+  /* ---------- floating: format ---------- */
+  .float {
+    position: fixed; z-index: 60; top: 0; left: 0;
+    display: flex; align-items: center; gap: 1px; padding: 4px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    backdrop-filter: blur(26px) saturate(180%);
+    border: .5px solid var(--rule); border-radius: 13px;
+    box-shadow: var(--shadow);
+    opacity: 0; transform: translateY(6px) scale(.97); pointer-events: none;
+    transition: opacity .15s ease, transform .2s var(--ease);
+  }
+  .float.show { opacity: 1; transform: none; pointer-events: auto; }
+  .tb {
+    height: 30px; min-width: 30px; padding: 0 8px;
+    border: none; background: transparent; cursor: pointer;
+    border-radius: 9px; color: var(--ink);
+    font-family: inherit; font-size: 13.5px; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s ease;
+  }
+  .tb:hover { background: var(--fill); }
+  .tb.active { background: var(--fill); }   /* neutral — not lilac */
+  .tb b { font-weight: 750; }
+  .tb .i { font-family: "New York", Georgia, serif; font-style: italic; font-size: 15px; }
+  .tb .u { text-decoration: underline; text-underline-offset: 2px; }
+  .tb .s { text-decoration: line-through; }
+  .tb .h { font-weight: 700; font-size: 12.5px; }
+  .tb .h sub { font-size: .7em; vertical-align: baseline; }
+  .sep { width: .5px; height: 18px; background: var(--rule); margin: 0 4px; }
+
+  /* ---------- floating: claim (lilac is correct here — it's about borrowed text) ---------- */
+  .claim {
+    position: fixed; z-index: 70; top: 0; left: 0;
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 4px 4px 12px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    backdrop-filter: blur(26px) saturate(180%);
+    border: .5px solid var(--rule); border-radius: 11px;
+    box-shadow: var(--shadow);
+    font-size: 12.5px; color: var(--ink-2); letter-spacing: -0.004em;
+    white-space: nowrap;
+    opacity: 0; transform: translateY(5px) scale(.97); pointer-events: none;
+    transition: opacity .15s ease, transform .2s var(--ease);
+  }
+  .claim.show { opacity: 1; transform: none; pointer-events: auto; }
+  .claim .swatch {
+    width: 8px; height: 8px; border-radius: 2.5px;
+    background: var(--mark-edge); display: inline-block; margin-right: 7px;
+    vertical-align: -1px;
+  }
+  .claim button {
+    font: inherit; font-size: 12.5px; font-weight: 550;
+    color: var(--mark-ink); background: var(--mark);
+    border: none; border-radius: 8px; padding: 5px 11px; cursor: pointer;
+    transition: filter .12s ease;
+  }
+  .claim button:hover { filter: brightness(.97); }
+
+  /* ---------- toast ---------- */
+  .toast {
+    position: fixed; bottom: 26px; left: 50%; z-index: 80;
+    transform: translateX(-50%) translateY(10px);
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 7px 7px 15px;
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    backdrop-filter: blur(26px) saturate(180%);
+    border: .5px solid var(--rule); border-radius: 999px;
+    box-shadow: var(--shadow);
+    font-size: 12.5px; color: var(--ink); letter-spacing: -0.004em;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s ease, transform .26s var(--ease);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%); pointer-events: auto; }
+  .toast button {
+    font: inherit; font-size: 12.5px; font-weight: 600;
+    color: var(--ink); background: var(--fill);
+    border: none; border-radius: 999px; padding: 4px 11px; cursor: pointer;
+  }
+  .toast button:hover { filter: brightness(.96); }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <header class="chrome">
+      <button class="brandbtn" id="brandBtn" aria-haspopup="true" aria-expanded="false">
+        <i class="mark"></i><span>Onwards</span>
+        <svg class="chev" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M1 3.5 L5 7 L9 3.5" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="rail" id="rail"></div>
+
+    <div id="title" class="title" contenteditable="true" spellcheck="true" role="textbox" aria-label="Title"
+         data-placeholder="Untitled"></div>
+
+    <div id="editor" class="editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Your writing"
+         data-placeholder="Start writing…"></div>
+
+    <p class="primer" id="primer">Anything you paste is marked. Everything else is yours.</p>
+    <div class="colophon" id="colophon">
+      <span id="colStats"></span>
+      <button class="receipt-link" id="receiptBtn" type="button" hidden>Receipt</button>
+    </div>
+  </div>
+
+  <div class="veil" id="veil" role="dialog" aria-modal="true" aria-label="Receipt">
+    <div class="stage">
+      <div class="card" id="card"></div>
+      <div class="acts">
+        <button id="saveBtn" type="button">Save image</button>
+        <button id="doneBtn" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="menu" id="menu" role="menu" aria-label="Your pieces and export">
+    <div class="menu-label">Your pieces</div>
+    <div class="menu-list" id="docList"></div>
+    <div class="menu-sep"></div>
+    <button class="mi" id="miNew" role="menuitem"><span class="tick">+</span><span class="nm">New piece</span></button>
+    <div class="menu-sep"></div>
+    <button class="mi" id="miCopy" role="menuitem"><span class="tick"></span><span class="nm">Copy text</span></button>
+    <button class="mi" id="miTxt" role="menuitem"><span class="tick"></span><span class="nm">Download plain text</span></button>
+    <div class="menu-sep"></div>
+    <button class="mi danger" id="miDelete" role="menuitem"><span class="tick"></span><span class="nm">Delete this piece</span></button>
+  </div>
+
+  <div class="float" id="fmt">
+    <button class="tb" data-cmd="formatBlock" data-val="H1" title="Heading" aria-label="Heading"><span class="h">H<sub>1</sub></span></button>
+    <button class="tb" data-cmd="formatBlock" data-val="H2" title="Subheading" aria-label="Subheading"><span class="h">H<sub>2</sub></span></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="bold" title="Bold  ⌘B" aria-label="Bold"><b>B</b></button>
+    <button class="tb" data-cmd="italic" title="Italic  ⌘I" aria-label="Italic"><span class="i">I</span></button>
+    <button class="tb" data-cmd="underline" title="Underline  ⌘U" aria-label="Underline"><span class="u">U</span></button>
+    <button class="tb" data-cmd="strikeThrough" title="Strikethrough" aria-label="Strikethrough"><span class="s">S</span></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="insertUnorderedList" title="List" aria-label="Bulleted list">•</button>
+    <button class="tb" data-cmd="insertOrderedList" title="Numbered list" aria-label="Numbered list">1.</button>
+    <button class="tb" data-cmd="formatBlock" data-val="BLOCKQUOTE" title="Quote" aria-label="Quote">&#8220;</button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="createLink" title="Link">Link</button>
+  </div>
+
+  <div class="claim" id="claim">
+    <span><i class="swatch"></i>Pasted</span>
+    <button id="claimBtn" type="button">Mine</button>
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastMsg"></span>
+    <button id="toastUndo" type="button">Undo</button>
+  </div>
+
+<script>
+(function () {
+  const editor = document.getElementById('editor');
+  const titleEl = document.getElementById('title');
+  const fmt = document.getElementById('fmt');
+  const rail = document.getElementById('rail');
+  const primer = document.getElementById('primer');
+  const colStats = document.getElementById('colStats');
+  const receiptBtn = document.getElementById('receiptBtn');
+  const STORE = 'onwards.v4';
+  let uid = 0;
+
+  try { document.execCommand('styleWithCSS', false, false); } catch (e) {}
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) {}
+
+  /* Animations are a nicety, never a dependency. Backgrounded tabs, reduced
+     motion and interrupted transitions can all swallow `animationend`, so every
+     completion handler also gets a timer. Whichever lands first wins, once. */
+  function afterAnim(el, ms, fn) {
+    let done = false;
+    const run = () => {
+      if (done) return;
+      done = true;
+      el.removeEventListener('animationend', run);
+      fn();
+    };
+    el.addEventListener('animationend', run);
+    setTimeout(run, ms);
+  }
+
+  /* The title is part of the document, not a label — a pasted headline is
+     borrowed too, so both editable roots share one text model. */
+  const ROOTS = [titleEl, editor];
+
+  /* ---------- measure ---------- */
+  function measureNodes(list) {
+    let you = '', paste = '';
+    list.forEach(root => {
+      (function walk(n, inP) {
+        if (n.nodeType === 3) { inP ? (paste += n.nodeValue) : (you += n.nodeValue); return; }
+        const p = inP || (n.nodeType === 1 && n.classList.contains('pasted'));
+        n.childNodes.forEach(c => walk(c, p));
+      })(root, false);
+      you += ' ';
+    });
+    return { you, paste };
+  }
+  function measure() { return measureNodes(ROOTS); }
+  const words = s => (s.trim().match(/\S+/g) || []).length;
+  const chars = s => (s.match(/\S/g) || []).length;
+
+  /* ---------- the margin rule ---------- */
+  function drawRail() {
+    const top = titleEl.offsetTop;
+    rail.style.top = top + 'px';
+    rail.style.height = (editor.offsetTop + editor.offsetHeight - top) + 'px';
+
+    const eRect = { top: titleEl.getBoundingClientRect().top };
+    const seen = new Set();
+
+    allMarks().forEach(sp => {
+      if (!sp.dataset.id) sp.dataset.id = 'p' + (++uid);
+      const id = sp.dataset.id;
+      const rects = sp.getClientRects();
+      if (!rects.length) return;
+      let t = Infinity, b = -Infinity;
+      for (const r of rects) { t = Math.min(t, r.top); b = Math.max(b, r.bottom); }
+      seen.add(id);
+
+      let seg = rail.querySelector('[data-for="' + id + '"]');
+      if (!seg) {
+        seg = document.createElement('div');
+        seg.className = 'seg in';
+        seg.dataset.for = id;
+        rail.appendChild(seg);
+        afterAnim(seg, 700, () => seg.classList.remove('in'));
+      }
+      seg.style.top = Math.max(0, t - eRect.top) + 'px';
+      seg.style.height = Math.max(3, b - t) + 'px';
+    });
+
+    rail.querySelectorAll('.seg').forEach(s => {
+      if (!seen.has(s.dataset.for)) s.remove();
+    });
+  }
+
+  /* ---------- render ---------- */
+  function render() {
+    const { you, paste } = measure();
+    const wy = words(you), wp = words(paste), total = wy + wp;
+
+    // the app only mentions pasting when there is pasting
+    if (total === 0) {
+      colStats.textContent = '';
+      receiptBtn.hidden = true;
+    } else {
+      const mins = Math.max(1, Math.round(total / 220));
+      const pc = chars(you) + chars(paste);
+      let line = total.toLocaleString() + (total === 1 ? ' word' : ' words') + ' · ' + mins + ' min';
+      if (wp > 0) line += ' · ' + Math.round(chars(paste) / pc * 100) + '% pasted';
+      colStats.textContent = line;
+      receiptBtn.hidden = total < 20;   // a receipt for four words is a joke
+    }
+
+    primer.classList.toggle('gone', total > 0);
+    scheduleRail();   // layout reads are costly; never more than once a frame
+    save();
+  }
+  let railT = 0;
+  function scheduleRail() {
+    clearTimeout(railT);
+    railT = setTimeout(drawRail, 16);   // coalesce, but never rely on a frame
+  }
+
+  /* ---------- persistence ---------- */
+  /* ---------- the library ----------
+     One document that silently overwrites itself is a demo, not a notepad.
+     Everything lives in a single record so a piece can never be lost by
+     starting the next one. */
+  let lib = { docs: [], current: null };
+  const newId = () => 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const currentDoc = () => lib.docs.filter(d => d.id === lib.current)[0];
+
+  function snapshot() {
+    const d = currentDoc();
+    if (!d) return;
+    d.title = titleEl.innerHTML;
+    d.html = editor.innerHTML;
+    d.updated = Date.now();
+  }
+
+  /* Writing to localStorage on every keystroke is wasteful and, on a long
+     piece, janky. Debounce it — but always flush before the page can go away. */
+  let saveT = null, warned = false;
+  function save() {
+    snapshot();
+    clearTimeout(saveT); saveT = setTimeout(flush, 400);
+  }
+  function flush() {
+    clearTimeout(saveT);
+    try { localStorage.setItem(STORE, JSON.stringify(lib)); warned = false; }
+    catch (e) {
+      /* Quota or private mode. Silence here means silently losing someone's
+         writing, so say it plainly and point at the way out. */
+      if (!warned) {
+        warned = true;
+        showToast('Can’t save — your browser is blocking storage. Export your work.', null, 12000);
+      }
+    }
+  }
+  window.addEventListener('pagehide', () => { snapshot(); flush(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    snapshot(); flush();
+  });
+
+  function load() {
+    let raw = null;
+    try { raw = localStorage.getItem(STORE); } catch (e) {}
+    if (raw) { try { lib = JSON.parse(raw) || lib; } catch (e) {} }
+
+    if (!lib.docs || !lib.docs.length) {
+      let old = null;                                   // carry over the old single doc
+      try { old = JSON.parse(localStorage.getItem('onwards.v3') || 'null'); } catch (e) {}
+      lib = {
+        docs: [{ id: newId(), title: (old && old.title) || '', html: (old && old.html) || '', updated: Date.now() }],
+        current: null
+      };
+      lib.current = lib.docs[0].id;
+    }
+    if (!currentDoc()) lib.current = lib.docs[0].id;
+    openDoc(lib.current, true);
+  }
+
+  function openDoc(id, initial) {
+    if (!initial) snapshot();
+    lib.current = id;
+    const d = currentDoc();
+    titleEl.innerHTML = d.title || '';
+    editor.innerHTML = d.html || '';
+    render();
+    if (!initial) {
+      flush();
+      (titleEl.textContent.trim() ? editor : titleEl).focus();
+    }
+  }
+  function newDoc() {
+    snapshot();
+    const d = { id: newId(), title: '', html: '', updated: Date.now() };
+    lib.docs.unshift(d);
+    openDoc(d.id);
+  }
+  function deleteDoc() {
+    const name = (titleEl.textContent || '').trim() || 'this untitled piece';
+    if (!confirm('Delete “' + name + '”?\n\nThis cannot be undone.')) return;
+    lib.docs = lib.docs.filter(d => d.id !== lib.current);
+    if (!lib.docs.length) lib.docs.push({ id: newId(), title: '', html: '', updated: Date.now() });
+    openDoc(lib.docs[0].id);
+  }
+  /* Leaving the title must never be a single point of failure: Enter, Tab and
+     Down all drop into the body, and the title refuses to become multi-line. */
+  titleEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === 'Tab' ||
+       (e.key === 'ArrowDown' && !e.shiftKey)) {
+      e.preventDefault();
+      editor.focus();
+      const s = window.getSelection(), r = document.createRange();
+      r.selectNodeContents(editor); r.collapse(true);
+      s.removeAllRanges(); s.addRange(r);
+    }
+  });
+
+  /* ---------- chrome fades while you write ---------- */
+  let writeT;
+  function writing(on) { document.body.classList.toggle('writing', on); }
+  editor.addEventListener('keydown', () => {
+    writing(true); clearTimeout(writeT);
+    writeT = setTimeout(() => writing(false), 2000);
+  });
+  ['mousemove', 'scroll'].forEach(ev =>
+    window.addEventListener(ev, () => { clearTimeout(writeT); writing(false); }, { passive: true }));
+
+  /* ---------- format toolbar ---------- */
+  fmt.addEventListener('mousedown', e => e.preventDefault());
+  fmt.addEventListener('click', function (e) {
+    const btn = e.target.closest('.tb');
+    if (!btn) return;
+    editor.focus();
+    const cmd = btn.dataset.cmd, val = btn.dataset.val;
+    if (cmd === 'createLink') {
+      const url = prompt('Link to');
+      if (url) document.execCommand('createLink', false, url.trim());
+    } else if (cmd === 'formatBlock') {
+      let cur = '';
+      try { cur = (document.queryCommandValue('formatBlock') || '').toLowerCase(); } catch (err) {}
+      document.execCommand('formatBlock', false, cur === val.toLowerCase() ? 'P' : val);
+    } else {
+      document.execCommand(cmd, false, null);
+    }
+    states(); detaint(); render(); placeFmt();
+  });
+
+  function states() {
+    ['bold','italic','underline','strikeThrough','insertUnorderedList','insertOrderedList']
+      .forEach(c => {
+        const b = fmt.querySelector('[data-cmd="' + c + '"]');
+        if (!b) return;
+        let on = false; try { on = document.queryCommandState(c); } catch (e) {}
+        b.classList.toggle('active', on);
+      });
+    let block = '';
+    try { block = (document.queryCommandValue('formatBlock') || '').toLowerCase(); } catch (e) {}
+    fmt.querySelectorAll('[data-cmd="formatBlock"]').forEach(b =>
+      b.classList.toggle('active', b.dataset.val.toLowerCase() === block));
+  }
+
+  function placeFmt() {
+    const s = window.getSelection();
+    if (!s.rangeCount || s.isCollapsed) { fmt.classList.remove('show'); return; }
+    const r = s.getRangeAt(0);
+    if (!editor.contains(r.commonAncestorContainer)) { fmt.classList.remove('show'); return; }
+    const rect = r.getBoundingClientRect();
+    if (!rect.width && !rect.height) { fmt.classList.remove('show'); return; }
+    fmt.classList.add('show');
+    const w = fmt.offsetWidth, h = fmt.offsetHeight, gap = 10;
+    let x = rect.left + rect.width / 2 - w / 2;
+    x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
+    let y = rect.top - h - gap;
+    if (y < 10) y = rect.bottom + gap;
+    fmt.style.left = Math.round(x) + 'px';
+    fmt.style.top = Math.round(y) + 'px';
+    states();
+  }
+
+  /* ---------- paste: the moment of truth ---------- */
+  function onPaste(root, singleLine) {
+    return function (e) {
+      e.preventDefault();
+      let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+      if (!text) return;
+      if (singleLine) text = text.replace(/\s*\n+\s*/g, ' ').trim();
+      const s = window.getSelection();
+      if (!s.rangeCount) root.focus();
+      const range = s.getRangeAt(0);
+      range.deleteContents();
+
+      const span = document.createElement('span');
+      span.className = 'pasted bloom';
+      span.dataset.id = 'p' + (++uid);
+      text.split('\n').forEach((line, i, arr) => {
+        span.appendChild(document.createTextNode(line));
+        if (i < arr.length - 1) span.appendChild(document.createElement('br'));
+      });
+      range.insertNode(span);
+      span.dataset.orig = span.textContent;
+      afterAnim(span, 750, () => span.classList.remove('bloom'));
+
+      range.setStartAfter(span); range.collapse(true);
+      s.removeAllRanges(); s.addRange(range);
+      render();
+    };
+  }
+  editor.addEventListener('paste', onPaste(editor, false));
+  titleEl.addEventListener('paste', onPaste(titleEl, true));
+
+  ROOTS.forEach(r => r.addEventListener('input', function () { detaint(); render(); }));
+
+  /* keep typed characters out of a mark */
+  function allMarks() {
+    const out = [];
+    ROOTS.forEach(r => r.querySelectorAll('.pasted').forEach(s => out.push(s)));
+    return out;
+  }
+  function detaint() {
+    let caretTo = null;
+    allMarks().forEach(span => {
+      const orig = span.dataset.orig;
+      if (orig == null) return;
+      const cur = span.textContent;
+      if (cur === orig) return;
+      if (cur.length > orig.length && cur.startsWith(orig)) {
+        const extra = cur.slice(orig.length);
+        trimEnd(span, extra.length);
+        const tn = document.createTextNode(extra);
+        span.parentNode.insertBefore(tn, span.nextSibling); caretTo = tn;
+      } else if (cur.length > orig.length && cur.endsWith(orig)) {
+        const extra = cur.slice(0, cur.length - orig.length);
+        trimStart(span, extra.length);
+        const tn = document.createTextNode(extra);
+        span.parentNode.insertBefore(tn, span); caretTo = tn;
+      } else {
+        span.dataset.orig = cur;
+      }
+      if (!span.textContent) span.remove();
+    });
+    if (caretTo) caretEnd(caretTo);
+  }
+  function textNodes(el){const o=[];(function w(n){n.nodeType===3?o.push(n):n.childNodes.forEach(w);})(el);return o;}
+  function trimEnd(sp,n){const t=textNodes(sp);let r=n;for(let i=t.length-1;i>=0&&r>0;i--){const k=Math.min(r,t[i].nodeValue.length);t[i].nodeValue=t[i].nodeValue.slice(0,t[i].nodeValue.length-k);r-=k;}}
+  function trimStart(sp,n){const t=textNodes(sp);let r=n;for(let i=0;i<t.length&&r>0;i++){const k=Math.min(r,t[i].nodeValue.length);t[i].nodeValue=t[i].nodeValue.slice(k);r-=k;}}
+  function caretEnd(node){const s=getSelection(),r=document.createRange();r.setStart(node,node.nodeValue?node.nodeValue.length:0);r.collapse(true);s.removeAllRanges();s.addRange(r);}
+
+  /* ---------- claiming a mark back ---------- */
+  const claim = document.getElementById('claim');
+  const claimBtn = document.getElementById('claimBtn');
+  const toast = document.getElementById('toast');
+  const toastMsg = document.getElementById('toastMsg');
+  const toastUndo = document.getElementById('toastUndo');
+  let hoverSpan = null, caretSpan = null, activeSpan = null, hideT = null, toastT = null;
+
+  function spanOf(node) {
+    if (!node) return null;
+    const el = node.nodeType === 3 ? node.parentElement : node;
+    return el && el.closest ? el.closest('.pasted') : null;
+  }
+  function showClaim(sp) {
+    if (!sp || !sp.isConnected) return;
+    clearTimeout(hideT);
+    if (activeSpan && activeSpan !== sp) activeSpan.classList.remove('hot');
+    activeSpan = sp; sp.classList.add('hot');
+    const rect = sp.getClientRects()[0] || sp.getBoundingClientRect();
+    claim.classList.add('show');
+    const w = claim.offsetWidth, h = claim.offsetHeight, gap = 8;
+    let x = rect.left + rect.width / 2 - w / 2;
+    x = Math.max(10, Math.min(x, window.innerWidth - w - 10));
+    let y = rect.top - h - gap;
+    if (y < 10) y = rect.bottom + gap;
+    claim.style.left = Math.round(x) + 'px';
+    claim.style.top = Math.round(y) + 'px';
+  }
+  function hideClaim(now) {
+    clearTimeout(hideT);
+    const go = () => {
+      claim.classList.remove('show');
+      if (activeSpan) activeSpan.classList.remove('hot');
+      activeSpan = null;
+    };
+    now ? go() : (hideT = setTimeout(go, 260));
+  }
+  function refreshClaim() {
+    const s = window.getSelection();
+    if (s.rangeCount && !s.isCollapsed) { hideClaim(true); return; }
+    const sp = hoverSpan || caretSpan;
+    sp ? showClaim(sp) : hideClaim();
+  }
+
+  ROOTS.forEach(r => {
+    r.addEventListener('mouseover', e => {
+      const sp = spanOf(e.target);
+      if (sp) { hoverSpan = sp; refreshClaim(); }
+    });
+    r.addEventListener('mouseout', e => {
+      if (spanOf(e.target)) { hoverSpan = null; refreshClaim(); }
+    });
+  });
+  claim.addEventListener('mouseenter', () => clearTimeout(hideT));
+  claim.addEventListener('mouseleave', () => { hoverSpan = null; refreshClaim(); });
+
+  claimBtn.addEventListener('mousedown', e => e.preventDefault());
+  claimBtn.addEventListener('click', () => {
+    const sp = activeSpan;
+    if (!sp || !sp.isConnected) return;
+    hoverSpan = caretSpan = null;
+    hideClaim(true);
+
+    const parent = sp.parentNode, after = sp.nextSibling;
+    const nodes = Array.prototype.slice.call(sp.childNodes);
+    const n = words(sp.textContent);
+    if (!nodes.length) return;
+
+    sp.classList.remove('hot');
+    sp.classList.add('claiming');
+    afterAnim(sp, 620, () => {
+      if (!sp.isConnected) return;
+      const frag = document.createDocumentFragment();
+      nodes.forEach(x => frag.appendChild(x));
+      parent.insertBefore(frag, after);
+      sp.remove();
+      render();
+      showToast(n + (n === 1 ? ' word' : ' words') + ' claimed as yours', () => {
+        const back = document.createElement('span');
+        back.className = 'pasted';
+        back.dataset.id = 'p' + (++uid);
+        nodes.forEach(x => back.appendChild(x));
+        parent.insertBefore(back, after);
+        back.dataset.orig = back.textContent;
+        render();
+      });
+    });
+  });
+
+  function showToast(msg, undoFn, ms) {
+    toastMsg.textContent = msg;
+    toastUndo.style.display = undoFn ? '' : 'none';
+    toastUndo.onclick = () => { undoFn && undoFn(); hideToast(); };
+    toast.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(hideToast, ms || 6000);
+  }
+  function hideToast() { clearTimeout(toastT); toast.classList.remove('show'); }
+  editor.addEventListener('input', hideToast);
+
+  /* ============================================================
+     THE RECEIPT
+     The card's artwork is the page itself: every rendered line of
+     text becomes a dash — ink where you wrote, lilac where you
+     borrowed. Read straight off the live layout, so every document
+     produces a fingerprint only it could produce.
+     ============================================================ */
+  const veil = document.getElementById('veil');
+  const card = document.getElementById('card');
+
+  function mergeLines(rects) {
+    const lines = [];
+    rects.forEach(r => {
+      if (r.width < 0.5 || r.height < 0.5) return;
+      const mid = r.top + r.height / 2;
+      const hit = lines.find(l => mid >= l.top && mid <= l.bottom);
+      if (hit) {
+        hit.left = Math.min(hit.left, r.left);
+        hit.right = Math.max(hit.right, r.right);
+      } else {
+        lines.push({ top: r.top, bottom: r.bottom, left: r.left, right: r.right });
+      }
+    });
+    return lines.sort((a, b) => a.top - b.top);
+  }
+
+  /* the live page, abstracted to line geometry + borrowed intervals */
+  function pageShape() {
+    const rects = [];
+    ROOTS.forEach(root => {
+      const blocks = [];
+      root.childNodes.forEach(n => {
+        if (n.nodeType === 1 && getComputedStyle(n).display !== 'inline') blocks.push(n);
+      });
+      (blocks.length ? blocks : [root]).forEach(b => {
+        const rg = document.createRange();
+        rg.selectNodeContents(b);
+        for (const r of rg.getClientRects()) rects.push(r);
+      });
+    });
+    const lines = mergeLines(rects);
+    if (!lines.length) return null;
+
+    const pasted = [];
+    allMarks().forEach(sp => { for (const r of sp.getClientRects()) pasted.push(r); });
+
+    const minL = Math.min.apply(null, lines.map(l => l.left));
+    const maxR = Math.max.apply(null, lines.map(l => l.right));
+    const span = Math.max(1, maxR - minL);
+
+    return lines.map(l => {
+      const mid = l.top + (l.bottom - l.top) / 2;
+      const marks = pasted
+        .filter(p => mid >= p.top && mid <= p.bottom)
+        .map(p => [
+          Math.max(0, (Math.max(p.left, l.left) - minL) / span),
+          Math.min(1, (Math.min(p.right, l.right) - minL) / span)
+        ])
+        .filter(iv => iv[1] > iv[0]);
+      return {
+        a: (l.left - minL) / span,
+        b: (l.right - minL) / span,
+        marks
+      };
+    });
+  }
+
+  const esc = s => String(s).replace(/[&<>"]/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let measurer;
+  function textWidth(str, font) {
+    measurer = measurer || document.createElement('canvas').getContext('2d');
+    measurer.font = font;
+    return measurer.measureText(str).width;
+  }
+  function wrap(str, font, max, maxLines) {
+    const out = [], w = str.split(/\s+/).filter(Boolean);
+    let cur = '';
+    for (const word of w) {
+      const t = cur ? cur + ' ' + word : word;
+      if (textWidth(t, font) <= max || !cur) { cur = t; }
+      else { out.push(cur); cur = word; if (out.length === maxLines) break; }
+    }
+    if (out.length < maxLines && cur) out.push(cur);
+    if (out.length === maxLines && w.length) {
+      const last = out[maxLines - 1];
+      if (textWidth(str, font) > textWidth(out.join(' '), font)) {
+        out[maxLines - 1] = last.replace(/[,.;:]?$/, '') + '…';
+      }
+    }
+    return out;
+  }
+
+  function buildCard() {
+    const shape = pageShape();
+    const { you, paste } = measure();
+    const wy = words(you), wp = words(paste), total = wy + wp;
+    const cy = chars(you), cp = chars(paste);
+    const pct = (cy + cp) === 0 ? 100 : Math.round(cy / (cy + cp) * 100);
+    const mins = Math.max(1, Math.round(total / 220));
+    const title = (titleEl.textContent || '').trim() || 'Untitled';
+
+    const W = 720, H = 960, PAD = 66;
+    const INK = '#1d1d1f', MUTED = '#86868b';
+    const DASH = '#26262a', AMBER = '#e8b955';
+
+    const titleFont = '700 44px -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Helvetica, Arial, sans-serif';
+    const tLines = wrap(title, titleFont, W - PAD * 2, 3);
+
+    let svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '">';
+    svg += '<rect width="' + W + '" height="' + H + '" fill="#ffffff"/>';
+
+    // identity
+    svg += '<circle cx="' + (PAD + 5) + '" cy="' + (PAD + 4) + '" r="5" fill="' + INK + '"/>';
+    svg += '<text x="' + (PAD + 20) + '" y="' + (PAD + 9) + '" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" font-weight="500" fill="' + MUTED + '" letter-spacing="-.1">Onwards</text>';
+
+    // title
+    let ty = PAD + 96;
+    tLines.forEach(l => {
+      svg += '<text x="' + PAD + '" y="' + ty + '" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="44" font-weight="700" fill="' + INK + '" letter-spacing="-1.5">' + esc(l) + '</text>';
+      ty += 52;
+    });
+
+    // the page, as texture — optically centred in whatever room is left
+    const innerW = W - PAD * 2;
+    const regionTop = ty + 30, regionBot = H - 186;
+    const regionH = Math.max(60, regionBot - regionTop);
+    if (shape && shape.length) {
+      const step = Math.min(11, regionH / shape.length);
+      const th = Math.max(1.4, Math.min(4.5, step * 0.42));
+      const artTop = regionTop + Math.max(0, (regionH - shape.length * step) / 2);
+      shape.forEach((ln, i) => {
+        const y = artTop + i * step;
+        const x0 = PAD + ln.a * innerW, w0 = Math.max(3, (ln.b - ln.a) * innerW);
+        svg += '<rect x="' + x0.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + w0.toFixed(1) + '" height="' + th.toFixed(1) + '" rx="' + (th / 2).toFixed(1) + '" fill="' + DASH + '" fill-opacity=".88"/>';
+        ln.marks.forEach(iv => {
+          const mx = PAD + iv[0] * innerW, mw = Math.max(2, (iv[1] - iv[0]) * innerW);
+          svg += '<rect x="' + mx.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + mw.toFixed(1) + '" height="' + th.toFixed(1) + '" rx="' + (th / 2).toFixed(1) + '" fill="' + AMBER + '"/>';
+        });
+      });
+    }
+
+    // the verdict, framed as something to be proud of
+    const headline = pct === 100 ? 'Every word yours' : pct + '% yours';
+    svg += '<text x="' + PAD + '" y="' + (H - 122) + '" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="38" font-weight="700" fill="' + INK + '" letter-spacing="-1.2">' + esc(headline) + '</text>';
+
+    const meta = total.toLocaleString() + (total === 1 ? ' word' : ' words') + ' · ' + mins + ' min read'
+      + (wp > 0 ? ' · ' + wp.toLocaleString() + ' pasted' + (wp === 1 ? ' word' : ' words') : '');
+    svg += '<text x="' + PAD + '" y="' + (H - 88) + '" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="' + MUTED + '" letter-spacing="-.2">' + esc(meta) + '</text>';
+
+    const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    svg += '<text x="' + PAD + '" y="' + (H - 62) + '" font-family="-apple-system, BlinkMacSystemFont, Inter, Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="' + MUTED + '" letter-spacing="-.2">' + esc(date) + '</text>';
+
+    svg += '</svg>';
+    return { svg: svg, title: title };
+  }
+
+  let current = null;
+  function openReceipt() {
+    current = buildCard();
+    card.innerHTML = current.svg;
+    veil.classList.add('show');
+  }
+  function closeReceipt() { veil.classList.remove('show'); }
+
+  receiptBtn.addEventListener('click', openReceipt);
+  document.getElementById('doneBtn').addEventListener('click', closeReceipt);
+  veil.addEventListener('mousedown', e => { if (e.target === veil) closeReceipt(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && veil.classList.contains('show')) closeReceipt();
+  });
+
+  function slug(s) {
+    return (s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'onwards').slice(0, 48);
+  }
+  function download(href, name) {
+    const a = document.createElement('a');
+    a.href = href; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    if (!current) return;
+    const name = slug(current.title);
+    const blob = new Blob([current.svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = function () {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 720 * 2; c.height = 960 * 2;
+        const g = c.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(img, 0, 0, c.width, c.height);
+        download(c.toDataURL('image/png'), name + '.png');
+      } catch (err) {
+        download(url, name + '.svg');       // canvas blocked — ship the vector
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    };
+    img.onerror = function () { download(url, name + '.svg'); };
+    img.src = url;
+  });
+
+  /* ============================================================
+     GETTING YOUR WORK OUT
+     A writing tool whose words can only leave as a picture isn't one.
+     Copy and plain text carry the words; print carries the marks.
+     ============================================================ */
+  /* One node, wrapped in its own markup. Kept separate from inlineOf so that a
+     bold or pasted span sitting at the top level still gets its markers — the
+     first paragraph of a contenteditable is bare inline nodes, not a <p>. */
+  function inlineNode(n, md) {
+    if (n.nodeType === 3) return n.nodeValue;
+    if (n.nodeType !== 1) return '';
+    const tag = n.tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    const inner = inlineOf(n, md);
+    if (!inner) return '';
+    if (!md) return inner;
+    if (n.classList && n.classList.contains('pasted')) return '==' + inner + '==';
+    if (tag === 'b' || tag === 'strong') return '**' + inner + '**';
+    if (tag === 'i' || tag === 'em') return '_' + inner + '_';
+    if (tag === 's' || tag === 'del' || tag === 'strike') return '~~' + inner + '~~';
+    if (tag === 'a') return '[' + inner + '](' + (n.getAttribute('href') || '') + ')';
+    return inner;
+  }
+  function inlineOf(parent, md) {
+    let out = '';
+    parent.childNodes.forEach(n => { out += inlineNode(n, md); });
+    return out;
+  }
+
+  const BLOCK = /^(p|div|h1|h2|h3|h4|h5|h6|ul|ol|blockquote|pre|hr|figure|table)$/;
+
+  function compose(md) { return composeFrom(titleEl, editor, md); }
+
+  function composeFrom(titleNode, bodyNode, md) {
+    const out = [];
+    const t = inlineOf(titleNode, md).trim();
+    if (t) out.push(md ? '# ' + t : t);
+
+    /* Consecutive inline nodes belong to one implicit paragraph; only a real
+       block element ends it. Without this, a paragraph exports in fragments. */
+    let run = [];
+    const endRun = () => {
+      const s = run.join('').trim();
+      if (s) out.push(s);
+      run = [];
+    };
+
+    Array.prototype.forEach.call(bodyNode.childNodes, n => {
+      const isBlock = n.nodeType === 1 && BLOCK.test(n.tagName.toLowerCase());
+      if (!isBlock) { run.push(inlineNode(n, md)); return; }
+      endRun();
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'h1' || tag === 'h2' || tag === 'h3') {
+        const s = inlineOf(n, md).trim();
+        if (s) out.push(md ? (tag === 'h1' ? '## ' : '### ') + s : s);
+      } else if (tag === 'ul' || tag === 'ol') {
+        const items = [];
+        Array.prototype.forEach.call(n.children, (li, i) => {
+          const s = inlineOf(li, md).trim();
+          if (s) items.push(md ? (tag === 'ul' ? '- ' : (i + 1) + '. ') + s : '• ' + s);
+        });
+        if (items.length) out.push(items.join('\n'));
+      } else if (tag === 'blockquote') {
+        const s = inlineOf(n, md).trim();
+        if (s) out.push(s.split('\n').map(l => (md ? '> ' : '    ') + l).join('\n'));
+      } else if (tag === 'hr') {
+        out.push(md ? '---' : '—');
+      } else {
+        const s = inlineOf(n, md).trim();
+        if (s) out.push(s);
+      }
+    });
+    endRun();
+    return out.join('\n\n');
+  }
+
+  function saveBlob(text, ext, mime) {
+    const url = URL.createObjectURL(new Blob([text], { type: mime }));
+    download(url, slug(titleEl.textContent || 'untitled') + '.' + ext);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  /* ---------- menu ---------- */
+  const menu = document.getElementById('menu');
+  const brandBtn = document.getElementById('brandBtn');
+  const docList = document.getElementById('docList');
+
+  function ago(ts) {
+    const s = (Date.now() - (ts || 0)) / 1000;
+    if (s < 90) return 'now';
+    if (s < 3600) return Math.round(s / 60) + 'm';
+    if (s < 86400) return Math.round(s / 3600) + 'h';
+    if (s < 86400 * 30) return Math.round(s / 86400) + 'd';
+    return new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  }
+
+  function paintList() {
+    snapshot();
+    docList.innerHTML = '';
+    lib.docs.slice().sort((a, b) => (b.updated || 0) - (a.updated || 0)).forEach(d => {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = d.title || '';
+      const name = (tmp.textContent || '').trim() || 'Untitled';
+      const borrowed = /class="[^"]*pasted/.test(d.html || '');
+      const b = document.createElement('button');
+      b.className = 'mi'; b.setAttribute('role', 'menuitem');
+      b.innerHTML = '<span class="tick">' + (d.id === lib.current ? '✓' : '') + '</span>' +
+        '<span class="nm"></span>' + (borrowed ? '<i class="pip" title="contains pasted text"></i>' : '') +
+        '<span class="when">' + ago(d.updated) + '</span>';
+      b.querySelector('.nm').textContent = name;
+      b.addEventListener('click', () => { closeMenu(); if (d.id !== lib.current) openDoc(d.id); });
+      docList.appendChild(b);
+    });
+  }
+
+  function openMenu() {
+    paintList();
+    menu.classList.add('show');
+    brandBtn.setAttribute('aria-expanded', 'true');
+    const r = brandBtn.getBoundingClientRect();
+    menu.style.left = Math.max(10, r.left) + 'px';
+    menu.style.top = (r.bottom + 8) + 'px';
+  }
+  function closeMenu() {
+    menu.classList.remove('show');
+    brandBtn.setAttribute('aria-expanded', 'false');
+  }
+  const menuOpen = () => menu.classList.contains('show');
+
+  brandBtn.addEventListener('click', e => { e.stopPropagation(); menuOpen() ? closeMenu() : openMenu(); });
+  document.addEventListener('mousedown', e => {
+    if (menuOpen() && !menu.contains(e.target) && !brandBtn.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && menuOpen()) { closeMenu(); brandBtn.focus(); } });
+
+  document.getElementById('miNew').addEventListener('click', () => { closeMenu(); newDoc(); });
+  document.getElementById('miDelete').addEventListener('click', () => { closeMenu(); deleteDoc(); });
+  document.getElementById('miTxt').addEventListener('click', () => {
+    closeMenu(); saveBlob(compose(false) + '\n', 'txt', 'text/plain;charset=utf-8');
+  });
+  document.getElementById('miCopy').addEventListener('click', async () => {
+    closeMenu();
+    const text = compose(false);
+    if (!text.trim()) { showToast('Nothing to copy yet'); return; }
+    try { await navigator.clipboard.writeText(text); showToast('Copied'); }
+    catch (e) { showToast('Clipboard blocked — use Download instead'); }
+  });
+
+  /* ---------- selection wiring ----------
+     Coalesced with a timer, not requestAnimationFrame: rAF stops firing in a
+     background or non-compositing tab, which would silently strand the
+     toolbar and the claim chip. Interactive state can't depend on a frame. */
+  let selT = 0;
+  document.addEventListener('selectionchange', () => {
+    clearTimeout(selT);
+    selT = setTimeout(() => {
+      placeFmt();
+      const s = window.getSelection();
+      const inDoc = s.rangeCount &&
+        ROOTS.some(r => r.contains(s.getRangeAt(0).startContainer));
+      caretSpan = (inDoc && s.isCollapsed) ? spanOf(s.getRangeAt(0).startContainer) : null;
+      refreshClaim();
+    }, 0);
+  });
+  window.addEventListener('scroll', () => { placeFmt(); if (activeSpan) refreshClaim(); }, true);
+  window.addEventListener('resize', () => { placeFmt(); scheduleRail(); if (menuOpen()) closeMenu(); });
+
+  load(); render(); states();
+  (titleEl.textContent.trim() ? editor : titleEl).focus();
+})();
+</script>
+</body>
+</html>

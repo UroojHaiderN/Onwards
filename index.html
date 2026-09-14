@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Onwards — a notepad that shows you what's yours</title>
+<meta name="description" content="I wrote this part. I pasted this part. Onwards marks anything you paste, so you always know how much of a piece is actually your own thinking. Free, local, open source." />
+<meta name="theme-color" content="#f6f3f4" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='8' fill='%2317171a'/%3E%3C/svg%3E" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Onwards" />
+<meta property="og:description" content="I wrote this part. I pasted this part. Now you can tell." />
+<meta name="twitter:card" content="summary_large_image" />
+
+<style>
+  /* Lato by Łukasz Dziedzic, SIL Open Font License — app/fonts/OFL.txt */
+  @font-face { font-family:'Lato'; src:url('app/fonts/Lato-Regular.ttf') format('truetype');
+    font-weight:400; font-style:normal; font-display:swap; }
+  @font-face { font-family:'Lato'; src:url('app/fonts/Lato-Bold.ttf') format('truetype');
+    font-weight:700; font-style:normal; font-display:swap; }
+
+  :root {
+    --ink:#15131a; --ink-2:#5d5a66; --ink-3:#a8a5b2;
+    --paper:#fff; --rule:rgba(21,19,26,.11); --hair:rgba(21,19,26,.10);
+    --mark:#ffe9b4; --accent:#c9801d; --accent-2:#f3c25a;
+    --focus:#0071e3;
+    --ease:cubic-bezier(.32,.72,0,1);
+    --prose:'Lato',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    --ui:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; color:var(--ink); font-family:var(--ui); background:#f6f3f4;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  ::selection { background:rgba(201,128,29,.20); }
+  :focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:10px; }
+  @media (prefers-reduced-motion:reduce){ *,*::before,*::after{
+    animation:none!important; transition-duration:.01ms!important; } }
+
+  /* ---------- mesh gradient: light where the type sits, saturated below ---------- */
+  /* fixed height, not min-height: the window must be clipped by the fold,
+     not push the page into scrolling */
+  .hero { position:relative; height:100svh; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; }
+  .shot-bg {
+    position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(58% 44% at 86% 32%, rgba(255,190,112,.95), transparent 64%),
+      radial-gradient(52% 52% at 98% 74%, rgba(246,138,112,.92), transparent 66%),
+      radial-gradient(52% 46% at 62% 99%, rgba(243,178,72,.85), transparent 66%),
+      radial-gradient(48% 46% at 2% 92%, rgba(126,196,206,.55), transparent 68%),
+      radial-gradient(46% 40% at 8% 40%, rgba(255,224,176,.55), transparent 70%),
+      #f8f6f3;
+  }
+  /* the faint rule grid, faded out behind the headline */
+  .shot-bg::before {
+    content:''; position:absolute; inset:0;
+    background-image:
+      linear-gradient(rgba(23,20,32,.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(23,20,32,.05) 1px, transparent 1px);
+    background-size:58px 58px;
+    -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 34%, #000 100%);
+    mask-image:linear-gradient(180deg, transparent 0%, #000 34%, #000 100%);
+  }
+  /* keep the top near-white so the headline always has contrast */
+  .shot-bg::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(180deg,
+      #f7f5f9 0%, rgba(247,245,249,.88) 14%, rgba(247,245,249,.52) 26%,
+      rgba(247,245,249,.16) 37%, transparent 48%);
+  }
+
+  .inner { position:relative; z-index:2; width:100%;
+    display:flex; flex-direction:column; align-items:center;
+    padding:26px 26px 0; text-align:center; flex:1; min-height:0; }
+
+  .brand { position:absolute; top:24px; left:30px; z-index:5;
+    display:inline-flex; align-items:center; gap:9px; }
+  .brand i { width:9px; height:9px; border-radius:50%; background:var(--ink); }
+  .brand span { font-size:13px; font-weight:600; letter-spacing:-.006em; }
+
+  /* headline group centres itself in whatever height the window leaves, so the
+     slack is shared above and below rather than pooling in one gap */
+  .lede { flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    padding-top:clamp(40px,13vh,170px); }   /* bias the centre downward */
+
+  h1 { font-family:var(--prose); font-weight:700; margin:0;
+    font-size:clamp(31px,5.3vw,68px); line-height:1.14; letter-spacing:-.036em;
+    max-width:17ch; }
+  /* A drawn underline. Sized in em so it scales with the type, tilted a touch,
+     with rounded caps — a pen stroke rather than a text-decoration rule. */
+  .swipe { position:relative; display:inline-block; }
+  .swipe::before {
+    content:''; position:absolute; z-index:0; pointer-events:none;
+    left:-.04em; right:-.04em; bottom:.08em; height:.11em;
+    background:var(--accent); border-radius:.06em;
+    transform:rotate(-.7deg);
+  }
+  /* a second, lighter pass — where the pen went back over itself */
+  .swipe::after {
+    content:''; position:absolute; z-index:0; pointer-events:none;
+    left:.02em; right:.03em; bottom:.035em; height:.065em;
+    background:var(--accent-2); border-radius:.04em;
+    transform:rotate(.5deg); opacity:.85;
+  }
+  .swipe em { position:relative; z-index:1; font-style:normal; }
+
+  .sub { font-family:var(--prose); font-size:clamp(15px,1.5vw,19px); line-height:1.6;
+    color:var(--ink-2); margin:clamp(14px,2.2vh,22px) 0 0; max-width:44ch; }
+
+  .actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    justify-content:center; margin-top:clamp(20px,3vh,30px); }
+  .btn { display:inline-flex; align-items:center; gap:7px; font-family:var(--ui);
+    font-size:14.5px; font-weight:600; padding:13px 24px; border-radius:999px;
+    cursor:pointer; border:none; white-space:nowrap; flex:none; text-decoration:none;
+    background:var(--ink); color:#fff;
+    box-shadow:0 10px 24px -12px rgba(21,19,26,.9);
+    transition:transform .15s var(--ease); }
+  .btn:hover { transform:translateY(-1px); }
+
+  /* ---------- the app, in a window, over the bottom edge ---------- */
+  /* pushed to the foot of the hero and allowed to run past it, so the
+     viewport crops the window exactly like the reference does */
+  /* The window fills whatever height is left and ends exactly at the fold, so
+     there's never a gap below it — and its text fades out rather than being
+     guillotined mid-line, which is what a fixed overshoot did on short screens. */
+  /* sizes to the writing and sits flush with the bottom edge — any spare
+     height becomes breathing room above it, never a gap underneath */
+  .frame { position:relative; z-index:3; width:min(1040px,100%);
+    margin:clamp(24px,3.4vh,40px) auto 0;
+    flex:0 1 auto; min-height:0; display:flex; flex-direction:column;
+    margin-top:auto; padding-top:clamp(24px,3.4vh,40px); }
+  .chrome {
+    background:rgba(236,233,238,.78);
+    -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    border-radius:14px 14px 0 0; padding:11px 14px 0;
+    box-shadow:0 -1px 0 rgba(255,255,255,.5) inset,
+               0 40px 90px -30px rgba(30,20,60,.45);
+    flex:1; min-height:0; display:flex; flex-direction:column;
+  }
+  .lights { display:flex; gap:7px; padding:0 2px 10px; }
+  .lights i { width:11px; height:11px; border-radius:50%; display:block; }
+  .lights i:nth-child(1){ background:#ff5f57; }
+  .lights i:nth-child(2){ background:#febc2e; }
+  .lights i:nth-child(3){ background:#28c840; }
+  .win { position:relative; background:var(--paper); border-radius:10px 10px 0 0;
+    padding:22px 26px 60px; text-align:left;   /* a foot of paper under the writing */
+    display:flex; flex-direction:column; gap:14px;
+    flex:0 1 auto; min-height:0; overflow:hidden; }
+  /* only when the text genuinely doesn't fit — otherwise it washes out a line
+     that was perfectly visible */
+  .win.clipped::after {
+    content:''; position:absolute; left:0; right:0; bottom:0; height:68px;
+    background:linear-gradient(to bottom, rgba(255,255,255,0), var(--paper) 76%);
+    pointer-events:none;
+  }
+
+  .win-bar { display:flex; align-items:center; justify-content:space-between; }
+  .win-bar .l { display:inline-flex; align-items:center; gap:7px;
+    font-size:11.5px; font-weight:600; color:var(--ink-2); }
+  .win-bar .l i { width:6px; height:6px; border-radius:50%; background:var(--ink-2); }
+  .win-stat { font-size:11.5px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+  .win-stat b { color:var(--ink); font-weight:700; }
+
+  .doc { display:flex; gap:16px; }
+  .rail { width:2px; border-radius:2px; background:var(--hair); flex:none; }
+  .pad { flex:1; min-width:0; outline:none; font-family:var(--prose);
+    color:var(--ink); caret-color:var(--accent); }
+  .pad .t { font-size:clamp(19px,1.9vw,24px); font-weight:700;
+    letter-spacing:-.02em; margin-bottom:9px; }
+  .pad .p { font-size:clamp(14px,1.25vw,16px); line-height:1.7; }
+  .pasted { background:var(--mark); border-radius:4px; padding:.06em .2em; margin:0 -.05em;
+    box-decoration-break:clone; -webkit-box-decoration-break:clone; }
+  .pasted.bloom { animation:bloom .6s var(--ease); }
+  @keyframes bloom { 0%{background-color:rgba(245,186,64,.6);} 100%{background-color:var(--mark);} }
+
+
+  /* short viewports: shrink the type rather than starve the window */
+  @media (max-height:780px){
+    h1   { font-size:clamp(28px,4vw,48px); }
+    .sub { font-size:15px; margin-top:12px; }
+    .actions { margin-top:16px; }
+    .btn { padding:10px 18px; font-size:13.5px; }
+    .frame { padding-top:20px; }   /* padding, not margin — margin-top:auto must survive */
+  }
+  @media (max-height:620px){
+    h1 { font-size:clamp(25px,3.2vw,36px); }
+    .sub { display:none; }        /* the headline already says it */
+  }
+
+  @media (max-width:760px){
+    .hero { height:auto; min-height:100svh; }   /* let it scroll on phones */
+    .brand { position:static; margin-bottom:14px; }
+    .inner { padding-top:24px; }
+    .ticks { margin-top:26px; }
+    .win { padding:18px 18px 26px; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <path id="sw" d="M3 10c26-4 48 3 80-1s54 4 84-1 30 3 30 3l-3-7s-24-4-54 0-52-5-84-1S5 6 2 8z"/>
+</defs></svg>
+
+<main class="hero">
+
+  <div class="shot-bg" aria-hidden="true"></div>
+
+  <span class="brand"><i></i><span>Onwards</span></span>
+
+  <div class="inner">
+
+    <div class="lede">
+    <h1>Anything you paste gets
+      <span class="swipe"><em>marked</em></span>.
+    </h1>
+
+    <p class="sub">So you always know how much of a piece is actually
+      your own thinking — and how much of it isn't.</p>
+
+    <div class="actions">
+      <a class="btn" href="app/">Start writing →</a>
+    </div>
+    </div>
+
+    <div class="frame">
+      <div class="chrome">
+        <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="win">
+          <div class="win-bar">
+            <span class="l"><i></i>Onwards</span>
+            <span class="win-stat" id="stat"></span>
+          </div>
+          <div class="doc">
+            <div class="rail" id="rail" aria-hidden="true"></div>
+            <div id="pad" class="pad"><div class="t">The honesty problem</div><div class="p">I keep noticing how easily a paragraph stops being mine. It starts with one borrowed line, and then the rhythm belongs to someone else. <span class="pasted">Moreover, it is important to consider the broader implications of this technological shift.</span> The tell is that it never hesitates. My own sentences hesitate. They double back. They admit when they are unsure, which is most of the time.</div><div class="p">That hesitation is the only part worth keeping. <span class="pasted">In conclusion, it is clear that a balanced approach will yield the most favourable outcomes going forward.</span> I would never write that sentence, and now I can see that I didn't.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(function () {
+  const pad  = document.getElementById('pad');
+  const stat = document.getElementById('stat');
+  const rail = document.getElementById('rail');
+  const chars = s => (s.match(/\S/g) || []).length;
+
+  function measure() {
+    let you = '', paste = '';
+    (function walk(n, inP) {
+      if (n.nodeType === 3) { inP ? (paste += n.nodeValue) : (you += n.nodeValue); return; }
+      const p = inP || (n.nodeType === 1 && n.classList.contains('pasted'));
+      n.childNodes.forEach(c => walk(c, p));
+    })(pad, false);
+    return { you, paste };
+  }
+
+  function drawRail() {
+    const marks = pad.querySelectorAll('.pasted');
+    if (!marks.length) { rail.style.background = 'var(--hair)'; return; }
+    const top = pad.getBoundingClientRect().top, h = pad.offsetHeight || 1;
+    const stops = [];
+    marks.forEach(m => {
+      const rects = m.getClientRects();
+      if (!rects.length) return;
+      let a = Infinity, b = -Infinity;
+      for (const r of rects) { a = Math.min(a, r.top); b = Math.max(b, r.bottom); }
+      stops.push([Math.max(0, (a - top) / h * 100), Math.min(100, (b - top) / h * 100)]);
+    });
+    if (!stops.length) { rail.style.background = 'var(--hair)'; return; }
+    let parts = [], at = 0;
+    stops.sort((x, y) => x[0] - y[0]).forEach(s => {
+      parts.push('var(--hair) ' + at + '% ' + s[0] + '%');
+      parts.push('var(--accent-2) ' + s[0] + '% ' + s[1] + '%');
+      at = s[1];
+    });
+    parts.push('var(--hair) ' + at + '% 100%');
+    rail.style.background = 'linear-gradient(' + parts.join(',') + ')';
+  }
+
+  function render() {
+    const m = measure(), cy = chars(m.you), cp = chars(m.paste);
+    const words = (m.you + ' ' + m.paste).trim().split(/\s+/).filter(Boolean).length;
+    stat.innerHTML = (cy + cp) === 0 ? '' :
+      words + ' words · <b>' + Math.round(cy / (cy + cp) * 100) + '%</b> yours';
+    drawRail();
+  }
+
+  // fade the foot of the document only if the window is actually cutting it off
+  const win = document.querySelector('.win');
+  function checkClip() {
+    win.classList.remove('clipped');
+    if (pad.getBoundingClientRect().bottom > win.getBoundingClientRect().bottom - 4) {
+      win.classList.add('clipped');
+    }
+  }
+
+  window.addEventListener('resize', function () { render(); checkClip(); });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { render(); checkClip(); });
+  }
+  render();
+  checkClip();
+
+})();
+</script>
+</body>
+</html>
