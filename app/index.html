@@ -465,8 +465,14 @@
     <button class="mi" id="miCopy" role="menuitem"><span class="tick"></span><span class="nm">Copy text</span></button>
     <button class="mi" id="miTxt" role="menuitem"><span class="tick"></span><span class="nm">Download plain text</span></button>
     <div class="menu-sep"></div>
+    <button class="mi" id="miBackup" role="menuitem"><span class="tick"></span><span class="nm">Back up everything…</span></button>
+    <button class="mi" id="miRestore" role="menuitem"><span class="tick"></span><span class="nm">Restore from backup…</span></button>
+    <div class="menu-sep"></div>
     <button class="mi danger" id="miDelete" role="menuitem"><span class="tick"></span><span class="nm">Delete this piece</span></button>
   </div>
+
+  <!-- restore's file picker: a plain input, so it works in WKWebView too -->
+  <input type="file" id="restoreFile" accept="application/json,.json" hidden />
 
   <div class="float" id="fmt">
     <button class="tb" data-cmd="formatBlock" data-val="H1" title="Heading" aria-label="Heading"><span class="h">H<sub>1</sub></span></button>
@@ -674,6 +680,12 @@
     const d = currentDoc();
     titleEl.innerHTML = d.title || '';
     editor.innerHTML = d.html || '';
+    /* Stored ids are meaningless across sessions — uid restarts at 0 each load,
+       so keeping them lets a restored mark collide with a freshly pasted one,
+       and the rail (keyed by data-for) then draws one segment for both. Drop
+       them and let render() stamp a unique id per mark. */
+    ROOTS.forEach(r => r.querySelectorAll('.pasted[data-id]')
+                        .forEach(s => s.removeAttribute('data-id')));
     render();
     if (!initial) {
       flush();
@@ -1222,6 +1234,159 @@
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
 
+  /* ============================================================
+     BACKUP AND RESTORE
+     localStorage is bound to one origin in one browser. Move to a
+     custom domain, switch to Safari, open the Mac app, or let
+     Safari's tracking prevention expire the store, and the library
+     is simply gone. This is the way out, and it is deliberately a
+     plain file you own rather than an account you rent.
+     ============================================================ */
+  const BACKUP_FORMAT = 'onwards.backup';
+
+  function backupAll() {
+    snapshot();                                   // fold in unsaved keystrokes
+    const payload = {
+      format: BACKUP_FORMAT,
+      version: 1,
+      exported: new Date().toISOString(),
+      docs: lib.docs.map(d => ({
+        id: d.id, title: d.title || '', html: d.html || '', updated: d.updated || 0
+      }))
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    const stamp = new Date().toISOString().slice(0, 10);
+    download(url, 'onwards-backup-' + stamp + '.json');
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    const n = payload.docs.length;
+    showToast('Backed up ' + n + (n === 1 ? ' piece' : ' pieces') + '.');
+  }
+
+  /* ---------- sanitising a restored file ----------
+     A backup is untrusted input: it arrives as a file, and its html goes
+     straight into innerHTML. Paste only ever accepts text/plain, so this is
+     the one place markup can enter from outside — a hostile file could
+     otherwise run <img onerror> and read the whole library back out.
+     So: allow exactly the tags this editor produces, drop everything else. */
+  const OK_TAGS = { P:1, DIV:1, BR:1, H1:1, H2:1, H3:1, BLOCKQUOTE:1,
+                    UL:1, OL:1, LI:1, B:1, STRONG:1, I:1, EM:1,
+                    U:1, S:1, STRIKE:1, SPAN:1, A:1 };
+
+  function unwrap(el) {
+    const p = el.parentNode; if (!p) return;
+    while (el.firstChild) p.insertBefore(el.firstChild, el);
+    p.removeChild(el);
+  }
+
+  function scrub(node) {
+    /* children first: unwrapping a parent afterwards can't then skip them */
+    Array.prototype.slice.call(node.childNodes).forEach(scrub);
+    if (node.nodeType === 3) return;                       // text is always fine
+    if (node.nodeType !== 1) { node.remove(); return; }    // comments, CDATA…
+    if (!OK_TAGS[node.tagName]) {
+      /* script/style carry no readable text worth keeping */
+      if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE') node.remove();
+      else unwrap(node);                                   // keep the words
+      return;
+    }
+    /* strip every attribute except the handful this app authors itself —
+       that takes out every on* handler and every style in one pass */
+    Array.prototype.slice.call(node.attributes).forEach(a => {
+      const n = a.name.toLowerCase();
+      const keep = (node.tagName === 'SPAN' && (n === 'class' || n === 'data-orig'))
+                || (node.tagName === 'A' && n === 'href');
+      if (!keep) node.removeAttribute(a.name);
+    });
+    if (node.tagName === 'SPAN') {
+      /* the only span this app makes is a mark; anything else is decoration */
+      if (!node.classList.contains('pasted')) { unwrap(node); return; }
+      node.className = 'pasted';                 // drop transient bloom/hot
+    }
+    if (node.tagName === 'A') {
+      const href = (node.getAttribute('href') || '').trim();
+      if (!/^(https?:|mailto:)/i.test(href)) node.removeAttribute('href');
+      else { node.setAttribute('rel', 'noopener noreferrer'); node.setAttribute('target', '_blank'); }
+    }
+  }
+
+  function sanitize(html) {
+    /* an inert document: innerHTML here loads nothing and fires no handlers */
+    const doc = document.implementation.createHTMLDocument('');
+    doc.body.innerHTML = String(html == null ? '' : html);
+    Array.prototype.slice.call(doc.body.childNodes).forEach(scrub);
+    return doc.body.innerHTML;
+  }
+
+  function restoreFrom(text) {
+    let data;
+    try { data = JSON.parse(text); }
+    catch (e) { showToast('That file isn’t a backup — couldn’t read it.', null, 8000); return; }
+
+    if (!data || data.format !== BACKUP_FORMAT || !Array.isArray(data.docs)) {
+      showToast('That file isn’t an Onwards backup.', null, 8000); return;
+    }
+
+    snapshot();
+    /* A deep copy, not .slice(): the merge below calls Object.assign on these
+       very objects, so a shallow copy would hand undo the overwritten versions. */
+    const before = lib.docs.map(d => ({ id: d.id, title: d.title, html: d.html, updated: d.updated }));
+    let added = 0, updated = 0, same = 0;
+
+    data.docs.forEach(raw => {
+      if (!raw || typeof raw !== 'object') return;
+      const inc = {
+        id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
+        title: sanitize(raw.title),
+        html: sanitize(raw.html),
+        updated: typeof raw.updated === 'number' ? raw.updated : 0
+      };
+      const mine = lib.docs.filter(d => d.id === inc.id)[0];
+      if (!mine) { lib.docs.push(inc); added++; }
+      else if (inc.updated > (mine.updated || 0)) { Object.assign(mine, inc); updated++; }
+      else same++;
+    });
+
+    /* a first run leaves one blank Untitled behind; don't strand it above
+       everything that just arrived */
+    if (added) {
+      const empty = d => !(d.title || '').trim() && !(d.html || '').trim();
+      const keep = lib.docs.filter(d => !empty(d));
+      if (keep.length) lib.docs = keep;
+    }
+
+    /* sort first, so that landing on "the first piece" means the newest one
+       rather than whichever happened to be pushed in first */
+    lib.docs.sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    if (!currentDoc()) lib.current = lib.docs[0].id;
+    /* `true` = don't snapshot on the way in: the open document may be one we
+       just replaced, and snapshotting would write the stale screen back over it */
+    openDoc(lib.current, true);
+    flush();
+
+    const bits = [];
+    if (added)   bits.push(added + ' restored');
+    if (updated) bits.push(updated + ' updated');
+    if (same)    bits.push(same + ' already current');
+    showToast(bits.length ? bits.join(' · ') : 'Nothing to restore.',
+      (added || updated) ? () => {            // putting it back must be possible
+        lib.docs = before;
+        if (!currentDoc()) lib.current = lib.docs[0].id;
+        openDoc(lib.current, true); flush();
+      } : null, 9000);
+  }
+
+  const restoreFile = document.getElementById('restoreFile');
+  restoreFile.addEventListener('change', function () {
+    const f = this.files && this.files[0];
+    this.value = '';                              // same file twice must re-fire
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => restoreFrom(String(r.result || ''));
+    r.onerror = () => showToast('Couldn’t read that file.', null, 8000);
+    r.readAsText(f);
+  });
+
   /* ---------- menu ---------- */
   const menu = document.getElementById('menu');
   const brandBtn = document.getElementById('brandBtn');
@@ -1280,6 +1445,8 @@
   document.getElementById('miTxt').addEventListener('click', () => {
     closeMenu(); saveBlob(compose(false) + '\n', 'txt', 'text/plain;charset=utf-8');
   });
+  document.getElementById('miBackup').addEventListener('click', () => { closeMenu(); backupAll(); });
+  document.getElementById('miRestore').addEventListener('click', () => { closeMenu(); restoreFile.click(); });
   document.getElementById('miCopy').addEventListener('click', async () => {
     closeMenu();
     const text = compose(false);
