@@ -82,11 +82,3 @@ Check it the way a downloader's Mac will:
 ```bash
 spctl -a -vvv -t install mac/build/Onwards.app   # want: accepted
 ```
-
-## Credits
-
-- [Lato](https://www.latofonts.com/) by Łukasz Dziedzic, SIL Open Font License
-  (see `app/fonts/OFL.txt`)
-- Nudged along by [freewrite](https://www.freewrite.io/) by Farza — a different
-  answer to the same worry. Freewrite *prevents* (no backspace, a timer, a blank
-  page); Onwards *reveals*.
